@@ -24,7 +24,9 @@ import {
   Lock,
   Unlock,
   Search,
-  StickyNote
+  StickyNote,
+  Mail,
+  Copy
 } from "lucide-react";
 
 import { WindowConfig, WindowId } from "./types";
@@ -195,6 +197,7 @@ export default function App() {
   const [cpuUsage, setCpuUsage] = useState(12);
   const [soundActive, setSoundActive] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
+  const [copiedDraft, setCopiedDraft] = useState(false);
   
   // Custom contact form local persistence state
   const [contactName, setContactName] = useState("");
@@ -402,160 +405,36 @@ export default function App() {
     setActivationNeeded(false);
     playBeep(1100, 0.1);
 
-    // Helper to process response payload for activation & success states
-    const parseFormSubmitResponse = (data: any, status: number) => {
-      const msgLower = (data.message || "").toLowerCase();
-      const errLower = (data.error || "").toLowerCase();
-      const needsActivation = 
-        data.activationNeeded || 
-        status === 400 || 
-        msgLower.includes("activation") || 
-        msgLower.includes("confirm") || 
-        msgLower.includes("verify") || 
-        msgLower.includes("activate") ||
-        errLower.includes("activation") || 
-        errLower.includes("confirm") || 
-        errLower.includes("verify") || 
-        errLower.includes("activate");
-
-      if (needsActivation) {
-        setActivationNeeded(true);
-        setContactStatus("SUCCESS");
-        playBeep(1500, 0.2);
-        setContactName("");
-        setContactEmail("");
-        setContactMsg("");
-        return true;
-      }
-
-      const isSuccessful = data.success === "true" || data.success === true || (data.success !== "false" && data.success !== false && !data.error);
-      if (isSuccessful) {
-        setActivationNeeded(false);
-        setContactStatus("SUCCESS");
-        playBeep(1500, 0.2);
-        setContactName("");
-        setContactEmail("");
-        setContactMsg("");
-        setTimeout(() => {
-          setContactStatus("IDLE");
-          setActivationNeeded(false);
-        }, 15000);
-        return true;
-      }
-
-      return false;
-    };
-
     try {
-      console.log("[SYS ADMIN] Attempting direct browser transmission to FormSubmit gateway...");
-      const response = await fetch("https://formsubmit.co/ajax/mihjigeorgechaka@gmail.com", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        body: JSON.stringify({
-          name: contactName,
-          email: contactEmail,
-          message: contactMsg,
-          _subject: `Mihji OS Desktop Message from ${contactName}`
-        })
-      });
-
-      const data = await response.json();
-      const handled = parseFormSubmitResponse(data, response.status);
-
-      if (!handled) {
-        throw new Error(data.message || data.error || `Endpoint returned status ${response.status}`);
-      }
-    } catch (browserErr: any) {
-      console.warn("Client-side direct mail routing failed/blocked, initiating backend proxy routing fallback...", browserErr);
+      const subject = `Message from ${contactName} (via Mihji OS)`;
+      const body = `Hi Mihji,\n\n${contactMsg}\n\n---\nSender Details:\nName: ${contactName}\nEmail: ${contactEmail}`;
       
-      try {
-        const response = await fetch("/api/contact", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-          },
-          body: JSON.stringify({
-            name: contactName,
-            email: contactEmail,
-            message: contactMsg
-          })
-        });
-
-        const data = await response.json();
-        
-        if (response.ok) {
-          const handled = parseFormSubmitResponse(data, response.status);
-          if (!handled) {
-            throw new Error(data.message || data.error || "Mail transmission failed through proxy.");
-          }
-        } else {
-          throw new Error(data.error || data.message || `Proxy endpoint returned error ${response.status}`);
-        }
-      } catch (proxyErr: any) {
-        console.warn("[SYS ADMIN] Proxy gateway failed/blocked. Deploying terminal secure native browser fallback stream...", proxyErr);
-        
-        try {
-          // Dynamic iframe routing mechanism - creates a secure hidden sandbox channel
-          const iframe = document.createElement("iframe");
-          iframe.name = "bg_contact_sandbox";
-          iframe.style.display = "none";
-          document.body.appendChild(iframe);
-
-          const form = document.createElement("form");
-          form.method = "POST";
-          form.action = "https://formsubmit.co/mihjigeorgechaka@gmail.com";
-          form.target = "bg_contact_sandbox";
-
-          const createHiddenField = (fieldName: string, fieldValue: string) => {
-            const input = document.createElement("input");
-            input.type = "hidden";
-            input.name = fieldName;
-            input.value = fieldValue;
-            form.appendChild(input);
-          };
-
-          createHiddenField("name", contactName);
-          createHiddenField("email", contactEmail);
-          createHiddenField("message", contactMsg);
-          createHiddenField("_subject", `Mihji OS CV Desktop Message from ${contactName}`);
-
-          document.body.appendChild(form);
-          form.submit();
-
-          // Standard garbage collection of sandbox elements
-          setTimeout(() => {
-            if (form.parentNode) document.body.removeChild(form);
-            if (iframe.parentNode) document.body.removeChild(iframe);
-          }, 8000);
-
-          // Force form success display with activation information (since first-time triggers have been queued)
-          setActivationNeeded(true);
-          setContactStatus("SUCCESS");
-          playBeep(1500, 0.2);
-          setContactName("");
-          setContactEmail("");
-          setContactMsg("");
-          
-          setTimeout(() => {
-            setContactStatus("IDLE");
-            setActivationNeeded(false);
-          }, 30000);
-        } catch (fallbackErr: any) {
-          console.error("[CRITICAL] Fallback sandboxed dispatch failed:", fallbackErr);
-          setContactStatus("ERROR");
-          setContactErrorMsg("Gateway offline. Please send direct email dispatch to: mihjigeorgechaka@gmail.com");
-          playBeep(450, 0.35);
-          setTimeout(() => {
-            setContactStatus("IDLE");
-            setContactErrorMsg("");
-          }, 12000);
-        }
-      }
+      const mailtoUrl = `mailto:mihjigeorgechaka@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      
+      // Trigger opening of mail client
+      window.location.href = mailtoUrl;
+      
+      setContactStatus("SUCCESS");
+      playBeep(1500, 0.2);
+      
+      setTimeout(() => {
+        setContactStatus("IDLE");
+      }, 10000);
+    } catch (err: any) {
+      console.error("[CRITICAL] Mail client trigger exception", err);
+      setContactStatus("ERROR");
+      setContactErrorMsg("Failed to launch your email client automatically. Please use the Copy Draft button below to send manually.");
+      playBeep(450, 0.35);
     }
+  };
+
+  const copyDraftToClipboard = () => {
+    if (!contactName || !contactEmail || !contactMsg) return;
+    const blockText = `Hi Mihji,\n\n${contactMsg}\n\n---\nSender Details:\nName: ${contactName}\nEmail: ${contactEmail}`;
+    navigator.clipboard.writeText(blockText);
+    setCopiedDraft(true);
+    playBeep(1400, 0.06);
+    setTimeout(() => setCopiedDraft(false), 3000);
   };
 
   // Dynamic theme variables configurations
@@ -1218,7 +1097,7 @@ export default function App() {
                   {/* Form Submission block */}
                   <div>
                     <h3 className="font-mono text-xs font-bold text-cyan-300 uppercase tracking-widest mb-3 pb-1 border-b border-zinc-800">
-                      TRANSMIT MESSAGE
+                      COMPOSE EMAIL DRAFT
                     </h3>
 
                     <form onSubmit={submitContactForm} className="space-y-3 font-mono text-[10px]">
@@ -1255,44 +1134,41 @@ export default function App() {
                         />
                       </div>
 
-                      <button
-                        type="submit"
-                        disabled={contactStatus !== "IDLE"}
-                        className="w-full py-2 bg-cyan-950 border border-cyan-500/20 text-cyan-400 font-bold rounded cursor-pointer hover:bg-cyan-900 hover:text-cyan-200 transition text-[9px] tracking-widest flex items-center justify-center gap-1.5"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                        <span>{contactStatus === "SENDING" ? "TRANSMITTING..." : "TRANSMIT PAYLOAD"}</span>
-                      </button>
+                      <div className="grid grid-cols-1 gap-2 pt-1.5">
+                        <button
+                          type="submit"
+                          className="w-full py-2 bg-cyan-950 border border-cyan-500/30 text-cyan-400 font-bold rounded cursor-pointer hover:bg-cyan-900 hover:text-cyan-200 hover:border-cyan-400 transition text-[9px] tracking-widest flex items-center justify-center gap-1.5"
+                        >
+                          <Mail className="w-3.5 h-3.5" />
+                          <span>LAUNCH EMAIL CLIENT</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={copyDraftToClipboard}
+                          disabled={!contactName || !contactEmail || !contactMsg}
+                          className="w-full py-2 bg-zinc-900 border border-zinc-800 text-zinc-300 font-bold rounded cursor-pointer hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition text-[9px] tracking-widest flex items-center justify-center gap-1.5 hover:border-cyan-400/40"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>{copiedDraft ? "DRAFT PAYLOAD COPIED!" : "COPY MESSAGE DRAFT"}</span>
+                        </button>
+                      </div>
 
                       {contactStatus === "SUCCESS" && (
-                        activationNeeded ? (
-                          <div className="border border-amber-500/40 bg-amber-950/20 p-2.5 rounded text-[8.5px] uppercase tracking-normal leading-relaxed text-amber-200 animate-fade-in text-left">
-                            <div className="font-bold text-amber-400 mb-1 flex items-center gap-1">
-                              <ShieldAlert className="w-3.5 h-3.5 animate-pulse text-amber-400 shrink-0" />
-                              <span>[GATEWAY ACTIVATION REQUIRED]</span>
-                            </div>
-                            <p className="mb-1.5 text-zinc-300 font-sans tracking-tight leading-normal text-[8.5px]">
-                              Mihji OS Mail Gateway is integrated with <strong className="text-cyan-400">FormSubmit.co</strong> to route messages directly to <strong className="text-cyan-400">mihjigeorgechaka@gmail.com</strong>. Since this is the first submission, please activate your form using the instructions sent to your email.
-                            </p>
-                            <div className="bg-slate-950/60 p-2 border border-amber-500/20 rounded mb-1.5 text-zinc-300 text-[8px] font-mono select-all tracking-wide text-left">
-                              1. Open your inbox (<strong className="text-cyan-400">mihjigeorgechaka@gmail.com</strong>)<br />
-                              2. Locate the activation email from FormSubmit.co<br />
-                              3. Click "Activate Form"
-                            </div>
-                            <span className="text-[7.5px] text-zinc-500 font-sans block normal-case">
-                              * Authorize the form once to enable secure direct messaging. Subsequent messages will deliver instantly!
-                            </span>
+                        <div className="border border-cyan-500/40 bg-slate-950/80 p-2.5 rounded text-[8.5px] uppercase tracking-normal leading-relaxed text-cyan-200 animate-fade-in text-left">
+                          <div className="font-bold text-cyan-400 mb-1 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            <span>[CLIENT OUTBOX INITIATED]</span>
                           </div>
-                        ) : (
-                          <p className="text-emerald-400 text-[8px] animate-pulse uppercase tracking-wider font-bold leading-normal">
-                            [SUCCESS]: Payload processed successfully. Gateway established! Subsequent dispatches will deliver instantly.
+                          <p className="mb-1 text-zinc-300 font-sans tracking-tight leading-normal text-[8.5px]">
+                            Opened your default mail app prefilled with details. If no client launched automatically, please use the <strong className="text-cyan-400">Copy Message Draft</strong> button and send to <strong className="text-cyan-400">mihjigeorgechaka@gmail.com</strong>.
                           </p>
-                        )
+                        </div>
                       )}
 
                       {contactStatus === "ERROR" && (
                         <p className="text-rose-400 border border-rose-950/40 bg-rose-950/20 p-2 rounded text-[8.5px] uppercase tracking-normal font-bold leading-relaxed whitespace-pre-wrap animate-fade-in text-left">
-                          [CRITICAL ERROR]: {contactErrorMsg || "Transmission error. Core gateway handshake timed out. Check connection routing pools."}
+                          [CRITICAL ERROR]: {contactErrorMsg || "Failed to initiate client stream. Please copy draft manually."}
                         </p>
                       )}
                     </form>
